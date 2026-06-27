@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>llm_inspector</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <div id="app-container">
+    
+    <!-- TOP NAVBAR -->
+    <header id="top-navbar">
+      <button id="btn-toggle-sidebar" style="background:none; border:none; color:var(--text-main); cursor:pointer; padding:4px 8px; margin-right:8px; display:flex; align-items:center;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      </button>
+      <span class="brand">llm_inspector</span>
+      <nav class="nav-links" id="nav-links">
+        <button class="nav-link active" data-tab="Traces">Traces</button>
+        <button class="nav-link" data-tab="Library">Library</button>
+        <button class="nav-link" data-tab="Replay">Replay</button>
+        <button class="nav-link" data-tab="Settings">Settings</button>
+      </nav>
+      <div class="search-container">
+        <div class="search-input-wrapper">
+          <span class="search-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </span>
+          <input type="text" id="search-input" class="search-input" placeholder="Search traces...">
+        </div>
+      </div>
+      <div class="nav-right-cluster">
+        <div class="nav-live">
+          <span class="nav-live-dot"></span>
+          <span class="nav-live-text">Live</span>
+        </div>
+        <div class="nav-cost" id="nav-cost-widget" style="display:flex; flex-direction:column; align-items:flex-end;">
+          <span style="font-size:10px; color:var(--text-light); font-weight:700; text-transform:uppercase;">Cost Today</span>
+          <span style="font-size:12px; font-family:var(--font-mono); font-weight:600; color:var(--accent-green);" id="nav-cost-today">$0.0000</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN TWO-PANEL CONTENT -->
+    <main id="main-content">
+      
+      <!-- LEFT FILTER SIDEBAR -->
+      <aside id="filter-sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">Filters</span>
+          <button class="sidebar-reset" id="reset-filters">Reset all</button>
+        </div>
+        <div class="sidebar-content">
+          <!-- STANDARD TRACES FILTERS -->
+          <div id="traces-filters">
+            <!-- STATUS -->
+            <div class="filter-section">
+              <p class="filter-section-title">Status</p>
+              <div id="filter-status">
+                <!-- Checkboxes dynamically injected here -->
+              </div>
+            </div>
+            <div class="filter-divider"></div>
+            
+            <!-- PROVIDER -->
+            <div class="filter-section">
+              <p class="filter-section-title">Provider</p>
+              <div id="filter-provider">
+                <!-- Checkboxes dynamically injected here -->
+              </div>
+            </div>
+            <div class="filter-divider"></div>
+
+            <!-- MODEL -->
+            <div class="filter-section">
+              <p class="filter-section-title">Model</p>
+              <div id="filter-model">
+                <!-- Checkboxes dynamically injected here -->
+              </div>
+            </div>
+            <div class="filter-divider"></div>
+
+            <!-- TIME RANGE -->
+            <div class="filter-section">
+              <p class="filter-section-title">Time Range</p>
+              <div class="time-range-grid" id="filter-time">
+                <button class="time-pill" data-val="Last 15m">Last 15m</button>
+                <button class="time-pill" data-val="Last 1h">Last 1h</button>
+                <button class="time-pill" data-val="Last 6h">Last 6h</button>
+                <button class="time-pill" data-val="1 day">1 day</button>
+                <button class="time-pill active" data-val="All-time" style="grid-column: 1 / -1;">All-time</button>
+              </div>
+            </div>
+            <div class="filter-divider"></div>
+
+            <!-- TAGS -->
+            <div class="filter-section">
+              <p class="filter-section-title">Tags</p>
+              <div id="filter-tags">
+                <!-- Checkboxes dynamically injected here -->
+              </div>
+            </div>
+            <div class="filter-divider"></div>
+            
+            <!-- PINNED -->
+            <div class="filter-section">
+              <p class="filter-section-title">Pinned</p>
+              <label class="filter-label">
+                <input type="checkbox" class="filter-checkbox" id="filter-pinned-only">
+                <span class="filter-text">Pinned only</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- MARKED (LIBRARY) FILTERS -->
+          <div id="marked-filters" style="display:none;">
+            <div class="filter-section">
+              <p class="filter-section-title">Library Filters</p>
+              
+              <label class="filter-label" style="margin-bottom:8px;">
+                <input type="checkbox" class="filter-checkbox" id="marked-filter-pinned">
+                <span class="filter-text">Pinned</span>
+              </label>
+
+              <label class="filter-label" style="margin-bottom:8px;">
+                <input type="checkbox" class="filter-checkbox" id="marked-filter-tagged">
+                <span class="filter-text">Tagged</span>
+              </label>
+
+              <label class="filter-label">
+                <input type="checkbox" class="filter-checkbox" id="marked-filter-versions">
+                <span class="filter-text">Has versions</span>
+              </label>
+            </div>
+            <div class="filter-divider"></div>
+          </div>
+
+        </div>
+      </aside>
+
+      <!-- MIDDLE TRACE LIST -->
+      <div id="trace-list">
+        <div class="list-header">
+          <span class="list-count" id="list-count">
+            <span class="list-count-num">0</span> <span class="list-count-text">Traces</span>
+          </span>
+          <button class="list-sort">
+            <span>Sort: Time</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+        </div>
+        <div class="list-content" id="list-container">
+          <!-- Trace Rows injected here -->
+        </div>
+      </div>
+
+      <!-- RIGHT DETAIL PANEL -->
+      <div id="detail-panel">
+        <div id="detail-empty" style="display: flex; flex:1; align-items:center; justify-content:center; color:var(--text-light); font-size:13px;">
+          Select a trace to view details.
+        </div>
+        
+        <div id="detail-content-wrap" style="display: none; flex-direction:column; height: 100%;">
+          <!-- Header -->
+          <div class="detail-header">
+            <span class="detail-badge" id="detail-badge">Succeeded</span>
+            <span class="detail-model" id="detail-model">gpt-4o</span>
+            <span class="detail-provider" id="detail-provider">openai</span>
+            <button class="pin-btn" id="btn-pin-trace" style="background:none; border:none; cursor:pointer; margin-right:12px;" title="Pin Trace">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="pin-icon-header"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            </button>
+            <div class="detail-stats" id="detail-stats">
+              <!-- Stat chips injected here -->
+            </div>
+          </div>
+          
+          <!-- Tags Header Bar -->
+          <div style="padding: 12px 28px; border-bottom: 1px solid var(--border-color); display:flex; align-items:center; gap:8px; flex-wrap:wrap;" id="detail-tags-bar">
+            <span style="font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:0.1em; margin-right:4px;">Tags</span>
+            <div id="detail-tags-list" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+            <input type="text" id="add-tag-input" placeholder="+ Add tag" style="font-size:11px; padding:2px 8px; border:1px solid var(--border-color); border-radius:12px; outline:none; width:90px;">
+          </div>
+
+          <!-- Error Strip -->
+          <div class="error-strip" id="detail-error-strip" style="display: none;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E8533A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span class="error-strip-code">Error</span>
+            <span class="error-strip-msg" id="detail-error-msg"></span>
+          </div>
+
+          <!-- Tab Bar -->
+          <div class="detail-tab-bar" id="detail-tabs">
+            <button class="detail-tab active" data-tab="REQUEST">REQUEST</button>
+            <button class="detail-tab" data-tab="RESPONSE / ERROR">RESPONSE / ERROR</button>
+            <button class="detail-tab" data-tab="REPLAY">REPLAY</button>
+            <button class="detail-tab" data-tab="DIFF">DIFF</button>
+            <button class="detail-tab" data-tab="COMPARE">COMPARE</button>
+          </div>
+
+          <!-- Scrollable Content -->
+          <div class="detail-content" id="detail-tab-content">
+            <!-- Selected tab content injected here -->
+          </div>
+
+          <!-- Bottom Action Bar -->
+          <div class="action-bar">
+            <button class="btn-secondary" id="btn-copy-curl">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy cURL</span>
+            </button>
+            <button class="btn-secondary" id="btn-copy-json">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy JSON</span>
+            </button>
+            <button class="btn-secondary" id="btn-export-trace">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              <span>Export</span>
+            </button>
+            <div class="header-spacer"></div>
+            <button class="btn-primary" id="btn-action-replay">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+              <span>Replay this call</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <!-- JS modules — load order matters: api → json-tree → diff → replay → trace-list → app -->
+  <script src="/static/api.js"></script>
+  <script src="/static/json-tree.js"></script>
+  <script src="/static/diff.js"></script>
+  <script src="/static/replay.js"></script>
+  <script src="/static/trace-list.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

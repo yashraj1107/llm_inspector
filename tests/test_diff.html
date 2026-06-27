@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<body>
+<pre id="out"></pre>
+<script>
+function computeWordDiff(str1, str2) {
+  if (typeof str1 !== 'string') str1 = '';
+  if (typeof str2 !== 'string') str2 = '';
+  const words1 = str1.trim() ? str1.trim().split(/\s+/) : [];
+  const words2 = str2.trim() ? str2.trim().split(/\s+/) : [];
+  
+  const n = words1.length;
+  const m = words2.length;
+  const dp = Array(n + 1).fill(null).map(() => Array(m + 1).fill(0));
+  
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      if (words1[i - 1] === words2[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+  
+  const segments = [];
+  let i = n, j = m;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && words1[i - 1] === words2[j - 1]) {
+      segments.unshift({ type: 'same', value: words1[i - 1] });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      segments.unshift({ type: 'added', value: words2[j - 1] });
+      j--;
+    } else {
+      segments.unshift({ type: 'removed', value: words1[i - 1] });
+      i--;
+    }
+  }
+  return segments;
+}
+
+const origReq = "Reply with exactly one sentence: what is 5 + 5?";
+const newReq = "Reply with exactly one sentence: explain the plot of the matrix movies.";
+
+const origResp = "10.";
+const newResp = "A hacker discovers reality is a simulation and joins a rebellion to free humanity.";
+
+const out = [];
+out.push("=== REQUEST DIFF ===");
+out.push(JSON.stringify(computeWordDiff(origReq, newReq), null, 2));
+out.push("");
+out.push("=== RESPONSE DIFF ===");
+out.push(JSON.stringify(computeWordDiff(origResp, newResp), null, 2));
+
+out.push("");
+out.push("=== FRANCE / GERMANY DIFF ===");
+out.push(JSON.stringify(computeWordDiff(
+  "What is the capital of France?",
+  "What is the capital of Germany?"
+), null, 2));
+
+document.getElementById("out").textContent = out.join("\n");
+</script>
+</body>
+</html>

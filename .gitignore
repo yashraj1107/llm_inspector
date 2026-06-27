@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+llm_inspector_data/
+.venv/
+*.egg-info/
