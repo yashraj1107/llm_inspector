@@ -63,7 +63,7 @@ llm-inspector ui        # opens http://localhost:8765
 | **Anthropic** | ⚠️ Patch implemented, not yet verified against a live successful call |
 | **Google Gemini** | ✅ Fully tested |
 
-> Anthropic and Gemini patches follow the same interception pattern as OpenAI but have not been validated end-to-end with a real API response. If you test them, check that `response_json` and token counts are populated correctly in the dashboard.
+> Anthropic patches follow the same interception pattern as OpenAI but have not been validated end-to-end with a real API response. If you test them, check that `response_json` and token counts are populated correctly in the dashboard.
 
 ## Data
 
