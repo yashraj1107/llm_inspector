@@ -33,7 +33,12 @@ CREATE TABLE IF NOT EXISTS traces (
     completion_tokens INTEGER,
     status            TEXT    NOT NULL CHECK(status IN ('ok', 'error')),
     error_message     TEXT,
-    tags               TEXT
+    user_id           TEXT,
+    tags               TEXT,
+    root_trace_id     TEXT,
+    span_type         TEXT,
+    tool_calls        TEXT,
+    ttft_ms           INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS model_pricing (
@@ -51,13 +56,15 @@ INSERT OR IGNORE INTO traces (
     request_json, response_json,
     latency_ms, prompt_tokens, completion_tokens,
     status, error_message, user_id,
-    parent_trace_id, failure_type, pinned, tags
+    parent_trace_id, failure_type, pinned, tags,
+    root_trace_id, span_type, tool_calls, ttft_ms
 ) VALUES (
     :id, :timestamp, :provider, :model,
     :request_json, :response_json,
     :latency_ms, :prompt_tokens, :completion_tokens,
     :status, :error_message, :user_id,
-    :parent_trace_id, :failure_type, :pinned, :tags
+    :parent_trace_id, :failure_type, :pinned, :tags,
+    :root_trace_id, :span_type, :tool_calls, :ttft_ms
 );
 """
 
@@ -81,7 +88,12 @@ def get_connection() -> sqlite3.Connection:
         "ALTER TABLE traces ADD COLUMN parent_trace_id TEXT;",
         "ALTER TABLE traces ADD COLUMN failure_type TEXT;",
         "ALTER TABLE traces ADD COLUMN pinned INTEGER DEFAULT 0;",
-        "ALTER TABLE traces ADD COLUMN tags TEXT;"
+        "ALTER TABLE traces ADD COLUMN tags TEXT;",
+        "ALTER TABLE traces ADD COLUMN user_id TEXT;",
+        "ALTER TABLE traces ADD COLUMN root_trace_id TEXT;",
+        "ALTER TABLE traces ADD COLUMN span_type TEXT;",
+        "ALTER TABLE traces ADD COLUMN tool_calls TEXT;",
+        "ALTER TABLE traces ADD COLUMN ttft_ms INTEGER;"
     ]:
         try:
             conn.execute(alter_sql)
@@ -143,6 +155,7 @@ _COLUMNS = (
     "latency_ms", "prompt_tokens", "completion_tokens",
     "status", "error_message", "user_id",
     "parent_trace_id", "failure_type", "pinned", "tags",
+    "root_trace_id", "span_type", "tool_calls", "ttft_ms",
 )
 
 

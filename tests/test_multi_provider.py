@@ -132,7 +132,7 @@ else:
         import google.genai as genai
 
         _gem_client = genai.Client(api_key=GEMINI_KEY)
-        _MODEL = "gemini-2.0-flash"
+        _MODEL = "gemini-2.5-flash"
         print(f"  Calling models.generate_content (model={_MODEL}) ...")
 
         _t0 = time.time()

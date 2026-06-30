@@ -25,6 +25,7 @@ from llm_inspector.patches import (
     patch_openai,
 )
 from llm_inspector.storage import db_path
+from llm_inspector.spans import span
 
 
 def auto() -> None:
@@ -48,5 +49,6 @@ __all__ = [
     "patch_anthropic",
     "patch_gemini",
     "db_path",
+    "span",
 ]
-__version__ = "0.3.0"
+__version__ = "0.3.2"

@@ -3,17 +3,39 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm_inspector"
-version = "0.3.0"
+name = "llm-inspector"
+version = "0.3.2"
+description = "Local-first capture, inspection, and replay for LLM API calls — Chrome DevTools for AI calls."
+readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+  {name = "Yashraj Sawant"}
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Debuggers",
+]
 dependencies = [
   "fastapi>=0.100",
   "uvicorn>=0.23",
-]   # SDKs (openai, anthropic, google-genai) remain optional
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.0"]
+anthropic = ["anthropic>=0.30"]
+gemini = ["google-genai>=0.1"]
+all = ["openai>=1.0", "anthropic>=0.30", "google-genai>=0.1"]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["llm_inspector*"]
+[tool.setuptools.package-data]
+llm_inspector = ["static/*", "static/**/*"]
 
 [project.scripts]
 llm-inspector = "llm_inspector.cli:main"
