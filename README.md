@@ -61,7 +61,7 @@ llm-inspector ui        # opens http://localhost:8765
 | **DeepSeek** (via OpenAI SDK with custom base URL) | ✅ Fully tested |
 | **OpenAI-Compatible Providers** | ✅ Automatically detected via base_url (Note: As of June 27, 2026, historical pre-fix traces captured before this update will remain mislabeled as 'openai') |
 | **Anthropic** | ⚠️ Patch implemented, not yet verified against a live successful call |
-| **Google Gemini** | ⚠️ Patch implemented, not yet verified against a live successful call |
+| **Google Gemini** | ✅ Fully tested |
 
 > Anthropic and Gemini patches follow the same interception pattern as OpenAI but have not been validated end-to-end with a real API response. If you test them, check that `response_json` and token counts are populated correctly in the dashboard.
 
