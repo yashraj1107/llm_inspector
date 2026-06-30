@@ -1,12 +1,12 @@
 """
-test_openai_patch.py — Smoke test for the OpenAI SDK patch (Step 2),
+test_openai_patch.py - Smoke test for the OpenAI SDK patch (Step 2),
 running against DeepSeek's OpenAI-compatible API.
 
 Run from the repo root:
     DEEPSEEK_API_KEY=sk-... python test_openai_patch.py
 
 If DEEPSEEK_API_KEY is not set the script exits cleanly with an explanatory
-message.  The openai_patch.py itself is NOT modified — this test confirms the
+message.  The openai_patch.py itself is NOT modified - this test confirms the
 existing patch works unmodified against an OpenAI-compatible provider.
 
 Expected output:
@@ -44,7 +44,7 @@ if not API_KEY:
 import llm_inspector
 
 llm_inspector.auto()
-print("[1] llm_inspector.auto() called — worker started, OpenAI patch installed.")
+print("[1] llm_inspector.auto() called - worker started, OpenAI patch installed.")
 print(f"    DB will be written to: {llm_inspector.db_path().resolve()}")
 
 # ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ client = openai.OpenAI(
     base_url="https://api.deepseek.com",
 )
 
-print("\n[2] Calling client.chat.completions.create (model=deepseek-chat) …")
+print("\n[2] Calling client.chat.completions.create (model=deepseek-chat) ...")
 try:
     response = client.chat.completions.create(
         model="deepseek-chat",
@@ -70,9 +70,9 @@ try:
         temperature=0,
     )
     assistant_reply = response.choices[0].message.content
-    print(f"    ✓ API call succeeded. Assistant replied: {assistant_reply!r}")
+    print(f"    PASS: API call succeeded. Assistant replied: {assistant_reply!r}")
 except openai.OpenAIError as exc:
-    print(f"    ✗ API error (this is NOT a bug in llm_inspector): {exc}")
+    print(f"    FAIL: API error (this is NOT a bug in llm_inspector) - {exc}")
     raise SystemExit(1) from exc
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ except openai.OpenAIError as exc:
 # ---------------------------------------------------------------------------
 
 SLEEP_S = 2
-print(f"\n[3] Sleeping {SLEEP_S} s to let the worker flush …", flush=True)
+print(f"\n[3] Sleeping {SLEEP_S} s to let the worker flush ...", flush=True)
 time.sleep(SLEEP_S)
 
 # ---------------------------------------------------------------------------
@@ -103,18 +103,16 @@ row = conn.execute(
 conn.close()
 
 if row is None:
-    print("    ✗ No rows found — the event was not persisted!")
+    print("FAIL: DB persistence - No rows found, the event was not persisted!")
     raise SystemExit(1)
 
-print("\n" + "─" * 60)
-print("  Most-recent row:")
-print("─" * 60)
+print("\n  Most-recent row:")
 
 d = dict(row)
 for k, v in d.items():
     display = v
     if isinstance(v, str) and len(v) > 80:
-        display = v[:77] + "…"
+        display = v[:77] + "..."
     print(f"  {k:<22} = {display!r}")
 
 # ---------------------------------------------------------------------------
@@ -130,10 +128,9 @@ def _valid_json(s: str) -> bool:
         return False
 
 
-print("\n" + "─" * 60)
-print("  Sanity checks:")
+print("\n  Sanity checks:")
 checks = [
-    ("provider == 'openai'",         d.get("provider") == "openai"),
+    ("provider == 'deepseek'",         d.get("provider") == "deepseek"),
     ("model == 'deepseek-chat'",     d.get("model") == "deepseek-chat"),
     ("request_json is valid JSON",   _valid_json(d.get("request_json", ""))),
     ("response_json is valid JSON",  _valid_json(d.get("response_json") or "null")),
@@ -143,17 +140,16 @@ checks = [
     ("status == 'ok'",               d.get("status") == "ok"),
 ]
 
-all_passed = True
+passed_count = 0
+total_count = len(checks)
+
 for label, passed in checks:
-    icon = "✓" if passed else "✗"
-    print(f"  {icon}  {label}")
-    if not passed:
-        all_passed = False
+    if passed:
+        print(f"PASS: {label}")
+        passed_count += 1
+    else:
+        print(f"FAIL: {label} - condition not met")
 
-print("─" * 60)
-if all_passed:
-    print("\n  All checks passed. Pipeline is working correctly. ✓")
-else:
-    print("\n  Some checks FAILED. See output above.")
-
-print("=" * 60)
+print(f"\nSUMMARY: {total_count} checks total, {passed_count} passed, {total_count - passed_count} failed.")
+if passed_count < total_count:
+    raise SystemExit(1)

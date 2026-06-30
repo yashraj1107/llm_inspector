@@ -33,7 +33,15 @@ CREATE TABLE IF NOT EXISTS traces (
     completion_tokens INTEGER,
     status            TEXT    NOT NULL CHECK(status IN ('ok', 'error')),
     error_message     TEXT,
-    user_id           TEXT
+    tags               TEXT
+);
+
+CREATE TABLE IF NOT EXISTS model_pricing (
+    model              TEXT PRIMARY KEY,
+    provider           TEXT NOT NULL,
+    prompt_price_per_1k     REAL,
+    completion_price_per_1k REAL,
+    last_verified      TEXT
 );
 """
 
@@ -66,7 +74,7 @@ def get_connection() -> sqlite3.Connection:
     _DB_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute(_CREATE_TABLE_SQL)
+    conn.executescript(_CREATE_TABLE_SQL)
     
     # Feature 0: Schema Upgrades
     for alter_sql in [
@@ -80,8 +88,37 @@ def get_connection() -> sqlite3.Connection:
         except sqlite3.OperationalError:
             pass  # Ignore if column already exists
 
+    _ensure_pricing_seeded(conn)
     conn.commit()
     return conn
+
+def _ensure_pricing_seeded(conn: sqlite3.Connection) -> None:
+    count = conn.execute("SELECT COUNT(*) FROM model_pricing").fetchone()[0]
+    if count > 0:
+        return
+        
+    import datetime
+    from llm_inspector.pricing import PRICING
+    
+    now_iso = datetime.datetime.utcnow().isoformat()
+    
+    for model, costs in PRICING.items():
+        provider = "unknown"
+        if "gpt" in model or "o1" in model:
+            provider = "openai"
+        elif "claude" in model:
+            provider = "anthropic"
+        elif "gemini" in model:
+            provider = "gemini"
+        elif "deepseek" in model:
+            provider = "deepseek"
+            
+        conn.execute(
+            '''INSERT INTO model_pricing 
+               (model, provider, prompt_price_per_1k, completion_price_per_1k, last_verified)
+               VALUES (?, ?, ?, ?, ?)''',
+            (model, provider, costs["prompt"], costs["completion"], now_iso)
+        )
 
 
 def write_batch(conn: sqlite3.Connection, events: list[dict]) -> None:
@@ -111,7 +148,10 @@ _COLUMNS = (
 
 def _coerce(event: dict) -> dict:
     """Return a dict that contains exactly the keys the INSERT statement needs."""
-    return {col: event.get(col) for col in _COLUMNS}
+    d = {col: event.get(col) for col in _COLUMNS}
+    if d.get("pinned") is None:
+        d["pinned"] = 0
+    return d
 
 
 def db_path() -> Path:

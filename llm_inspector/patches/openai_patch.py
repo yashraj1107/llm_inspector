@@ -27,6 +27,29 @@ _patched: bool = False
 # Public entry point
 # ---------------------------------------------------------------------------
 
+def _detect_provider(client) -> str:
+    """
+    Inspect the client's base_url to determine which real provider this 
+    call is actually going to. Falls back to 'openai' if base_url is 
+    unset or points at OpenAI's own domain.
+    """
+    try:
+        client_obj = getattr(client, "_client", client)
+        base = str(getattr(client_obj, "base_url", "") or "").lower()
+    except Exception:
+        return "openai"
+    
+    if "deepseek.com" in base:
+        return "deepseek"
+    if "openai.com" in base or base == "":
+        return "openai"
+    if "localhost" in base or "127.0.0.1" in base:
+        return "ollama"  # common local default, reasonable assumption
+    # anything else pointed at a non-OpenAI, non-DeepSeek domain via the 
+    # OpenAI-compatible client
+    return "openai-compatible"
+
+
 
 def patch_openai() -> None:
     """
@@ -61,8 +84,61 @@ def patch_openai() -> None:
         # ----------------------------------------------------------------
         response = _real_create(self, *args, **kwargs)
 
+        is_stream = kwargs.get("stream") is True
+        if is_stream:
+            def _stream_generator(original_generator, start_t, client_ref):
+                accumulated_content = []
+                prompt_tokens, completion_tokens = None, None
+                model = kwargs.get("model", "unknown") or "unknown"
+                request_json = "{}"
+                try:
+                    request_json = json.dumps(kwargs, default=str)
+                except Exception:
+                    pass
+
+                try:
+                    for chunk in original_generator:
+                        yield chunk
+                        try:
+                            if hasattr(chunk, 'choices') and chunk.choices:
+                                delta = getattr(chunk.choices[0], 'delta', None)
+                                if delta:
+                                    content = getattr(delta, 'content', None)
+                                    if content:
+                                        accumulated_content.append(content)
+                            if hasattr(chunk, 'usage') and chunk.usage:
+                                prompt_tokens = getattr(chunk.usage, 'prompt_tokens', None)
+                                completion_tokens = getattr(chunk.usage, 'completion_tokens', None)
+                        except Exception:
+                            pass
+                    
+                    try:
+                        # Latency is time until stream fully consumed
+                        latency_ms = int((time.time() - start_t) * 1000)
+                        
+                        event = {
+                            "id":                str(uuid.uuid4()),
+                            "timestamp":         int(time.time()),
+                            "provider":          _detect_provider(client_ref),
+                            "model":             model,
+                            "request_json":      request_json,
+                            "response_json":     json.dumps({"content": "".join(accumulated_content)}, default=str),
+                            "latency_ms":        latency_ms,
+                            "prompt_tokens":     prompt_tokens,
+                            "completion_tokens": completion_tokens,
+                            "status":            "ok",
+                            "error_message":     None,
+                        }
+                        enqueue_event(event)
+                    except Exception:
+                        pass
+                except Exception:
+                    raise
+
+            return _stream_generator(response, start_time, self)
+
         # ----------------------------------------------------------------
-        # Capture the successful call — all field extraction is wrapped
+        # Capture the successful synchronous call — all field extraction is wrapped
         # so that even a completely broken response object cannot raise
         # into the caller.
         # ----------------------------------------------------------------
@@ -119,7 +195,7 @@ def patch_openai() -> None:
             event: dict = {
                 "id":                str(uuid.uuid4()),
                 "timestamp":         int(time.time()),
-                "provider":          "openai",
+                "provider":          _detect_provider(self),
                 "model":             model,
                 "request_json":      request_json,
                 "response_json":     response_json,

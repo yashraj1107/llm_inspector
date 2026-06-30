@@ -1,5 +1,5 @@
 """
-test_inject.py — Manually inserts a synthetic trace into traces.db for diff testing.
+test_inject.py - Manually inserts a synthetic trace into traces.db for diff testing.
 
 Run from the repo root:
     python tests/test_inject.py
@@ -25,13 +25,17 @@ req = {
 }
 resp = {"content": "The capital of France is Paris."}
 
-conn.execute('''
-INSERT INTO traces (id, timestamp, provider, model, request_json, response_json, latency_ms, prompt_tokens, completion_tokens, status, error_message, user_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-''', (
-    trace_id, int(time.time()), 'openai', 'deepseek-chat', json.dumps(req), json.dumps(resp),
-    1000, 10, 10, 'ok', None, None
-))
-conn.commit()
-conn.close()
-print(f"Injected trace '{trace_id}' into {DB_PATH}")
+try:
+    conn.execute('''
+    INSERT INTO traces (id, timestamp, provider, model, request_json, response_json, latency_ms, prompt_tokens, completion_tokens, status, error_message, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        trace_id, int(time.time()), 'openai', 'deepseek-chat', json.dumps(req), json.dumps(resp),
+        1000, 10, 10, 'ok', None, None
+    ))
+    conn.commit()
+    print(f"PASS: Injected trace '{trace_id}' into {DB_PATH}")
+except Exception as e:
+    print(f"FAIL: Failed to inject trace - {e}")
+finally:
+    conn.close()

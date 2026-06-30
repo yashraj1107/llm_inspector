@@ -21,6 +21,7 @@ let _childrenMap = new Map();         // parent_id → child traces[] (FEATURE A
 let _availableEnvProviders = [];      // from /api/providers/available
 
 let _currentNavTab = 'Traces';        // 'Traces' | 'Library'
+let _currentSort = 'time';            // 'time' | 'latency' | 'status'
 const _markedFilters = { pinned: false, tagged: false, hasVersions: false };
 
 const _filters = {
@@ -31,6 +32,7 @@ const _filters = {
   tags: new Set(),           // FEATURE 6
   pinnedOnly: false,         // FEATURE 5
   timeRange: 'All-time',
+  customDate: '',            // FEATURE 4
   search: ''
 };
 
@@ -49,6 +51,7 @@ const els = {
   filterTime: document.getElementById('filter-time'),
   filterTags: document.getElementById('filter-tags'),
   filterPinnedOnly: document.getElementById('filter-pinned-only'),
+  filterCustomDate: document.getElementById('filter-custom-date'),
 
   markedFilterPinned: document.getElementById('marked-filter-pinned'),
   markedFilterTagged: document.getElementById('marked-filter-tagged'),
@@ -113,6 +116,8 @@ function attachStaticListeners() {
     _filters.pinnedOnly = false;
     els.filterPinnedOnly.checked = false;
     _filters.timeRange = 'All-time';
+    _filters.customDate = '';
+    if (els.filterCustomDate) els.filterCustomDate.value = '';
     els.searchInput.value = '';
     _filters.search = '';
     renderSidebar();   // trace-list.js
@@ -128,9 +133,22 @@ function attachStaticListeners() {
     const btn = e.target.closest('.time-pill');
     if (!btn) return;
     _filters.timeRange = btn.dataset.val;
+    _filters.customDate = '';
+    if (els.filterCustomDate) els.filterCustomDate.value = '';
     renderSidebar();
     applyFilters();
   });
+
+  if (els.filterCustomDate) {
+    els.filterCustomDate.addEventListener('change', (e) => {
+      _filters.customDate = e.target.value;
+      if (_filters.customDate) {
+        _filters.timeRange = '';
+        renderSidebar();
+      }
+      applyFilters();
+    });
+  }
 
   els.detailTabs.addEventListener('click', (e) => {
     const btn = e.target.closest('.detail-tab');
@@ -145,11 +163,31 @@ function attachStaticListeners() {
     const btn = e.target.closest('.nav-link');
     if (!btn) return;
     const tabName = btn.dataset.tab;
-    if (tabName !== 'Traces' && tabName !== 'Library') return;
+    // We handle Traces, Library, Settings
+    if (tabName !== 'Traces' && tabName !== 'Library' && tabName !== 'Settings') return;
 
     Array.from(document.getElementById('nav-links').children).forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     _currentNavTab = tabName;
+
+    const sidebar = document.getElementById('filter-sidebar');
+    const traceList = document.getElementById('trace-list');
+    const detailPanel = document.getElementById('detail-panel');
+    const settingsPanel = document.getElementById('settings-panel');
+
+    if (tabName === 'Settings') {
+      sidebar.style.display = 'none';
+      traceList.style.display = 'none';
+      detailPanel.style.display = 'none';
+      settingsPanel.style.display = 'flex';
+      renderSettingsTab();
+      return;
+    } else {
+      sidebar.style.display = 'flex';
+      traceList.style.display = 'flex';
+      detailPanel.style.display = 'flex';
+      settingsPanel.style.display = 'none';
+    }
 
     if (tabName === 'Library') {
       els.tracesFilters.style.display = 'none';
@@ -165,6 +203,15 @@ function attachStaticListeners() {
   els.markedFilterPinned.addEventListener('change', e => { _markedFilters.pinned = e.target.checked; applyFilters(); });
   els.markedFilterTagged.addEventListener('change', e => { _markedFilters.tagged = e.target.checked; applyFilters(); });
   els.markedFilterVersions.addEventListener('change', e => { _markedFilters.hasVersions = e.target.checked; applyFilters(); });
+
+  // STALE BANNER DISMISS
+  document.getElementById('btn-stale-dismiss').addEventListener('click', () => {
+    document.getElementById('stale-pricing-banner').style.display = 'none';
+  });
+  document.getElementById('btn-stale-review').addEventListener('click', () => {
+    const settingsBtn = Array.from(document.getElementById('nav-links').children).find(c => c.dataset.tab === 'Settings');
+    if (settingsBtn) settingsBtn.click();
+  });
 
   els.btnActionReplay.addEventListener('click', () => {
     const tabBtn = Array.from(els.detailTabs.children).find(b => b.dataset.tab === 'REPLAY');
@@ -231,6 +278,151 @@ function attachStaticListeners() {
       }
     }
   });
+
+  const btnSort = document.querySelector('.list-sort');
+  if (btnSort) {
+    btnSort.addEventListener('click', () => {
+      if (_currentSort === 'time') _currentSort = 'latency';
+      else if (_currentSort === 'latency') _currentSort = 'status';
+      else _currentSort = 'time';
+      
+      const lbl = _currentSort.charAt(0).toUpperCase() + _currentSort.slice(1);
+      btnSort.querySelector('span').textContent = `Sort: ${lbl}`;
+      applyFilters();
+    });
+  }
+}
+
+async function checkStalePricing() {
+  try {
+    const res = await fetch('/api/pricing/stale');
+    if (res.ok) {
+      const staleModels = await res.json();
+      if (staleModels.length > 0) {
+        document.getElementById('stale-pricing-text').textContent = `Pricing for ${staleModels.length} model(s) hasn't been verified in over a week.`;
+        document.getElementById('stale-pricing-banner').style.display = 'flex';
+      } else {
+        document.getElementById('stale-pricing-banner').style.display = 'none';
+      }
+    }
+  } catch (e) {
+    console.error("Failed to check stale pricing:", e);
+  }
+}
+
+async function renderSettingsTab() {
+  const container = document.getElementById('settings-content');
+  container.innerHTML = '<div style="color:var(--text-light); font-size:13px;">Loading pricing data...</div>';
+  
+  try {
+    const res = await fetch('/api/pricing');
+    const data = await res.json();
+    
+    let html = `
+      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-medium);">
+            <th style="padding: 12px 8px;">Model</th>
+            <th style="padding: 12px 8px;">Provider</th>
+            <th style="padding: 12px 8px;">Prompt $/1k</th>
+            <th style="padding: 12px 8px;">Completion $/1k</th>
+            <th style="padding: 12px 8px;">Last Verified</th>
+            <th style="padding: 12px 8px; width: 120px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    data.forEach(row => {
+      const promptId = `price-prompt-${row.model.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+      const compId = `price-comp-${row.model.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+      const btnId = `btn-edit-${row.model.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+      const staleColor = row.days_since_verified > 7 ? 'color: var(--accent-orange); font-weight:600;' : 'color: var(--text-light);';
+      
+      html += `
+        <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-main);">
+          <td style="padding: 12px 8px; font-weight: 600;">${esc(row.model)}</td>
+          <td style="padding: 12px 8px;">${esc(row.provider)}</td>
+          <td style="padding: 12px 8px;" id="${promptId}-cell">
+            <span class="price-val">${row.prompt_price_per_1k}</span>
+            <input type="number" step="0.000001" class="price-input" style="display:none; width:80px; padding:4px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-main);" value="${row.prompt_price_per_1k}">
+          </td>
+          <td style="padding: 12px 8px;" id="${compId}-cell">
+            <span class="price-val">${row.completion_price_per_1k}</span>
+            <input type="number" step="0.000001" class="price-input" style="display:none; width:80px; padding:4px; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-main);" value="${row.completion_price_per_1k}">
+          </td>
+          <td style="padding: 12px 8px;">
+            <div>${row.last_verified ? new Date(row.last_verified).toLocaleDateString() : 'Never'}</div>
+            <div style="font-size:11px; ${staleColor}">${row.days_since_verified} days ago</div>
+          </td>
+          <td style="padding: 12px 8px;">
+            <button class="btn-secondary" id="${btnId}" data-model="${esc(row.model)}" style="padding:4px 12px; height:auto; min-height:28px;">Edit</button>
+          </td>
+        </tr>
+      `;
+    });
+    
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+    
+    // Attach event listeners for Edit buttons
+    data.forEach(row => {
+      const safeModel = row.model.replace(/[^a-zA-Z0-9_-]/g, '');
+      const btn = document.getElementById(`btn-edit-${safeModel}`);
+      const promptCell = document.getElementById(`price-prompt-${safeModel}-cell`);
+      const compCell = document.getElementById(`price-comp-${safeModel}-cell`);
+      
+      if (!btn) return;
+      
+      let isEditing = false;
+      btn.addEventListener('click', async () => {
+        if (!isEditing) {
+          // Switch to edit mode
+          isEditing = true;
+          promptCell.querySelector('.price-val').style.display = 'none';
+          promptCell.querySelector('.price-input').style.display = 'block';
+          compCell.querySelector('.price-val').style.display = 'none';
+          compCell.querySelector('.price-input').style.display = 'block';
+          btn.textContent = 'Save';
+          btn.classList.remove('btn-secondary');
+          btn.classList.add('btn-primary');
+        } else {
+          // Save
+          btn.disabled = true;
+          btn.textContent = 'Saving...';
+          const newPrompt = parseFloat(promptCell.querySelector('.price-input').value);
+          const newComp = parseFloat(compCell.querySelector('.price-input').value);
+          
+          try {
+            const req = await fetch(`/api/pricing/${row.model}`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                prompt_price_per_1k: newPrompt,
+                completion_price_per_1k: newComp
+              })
+            });
+            if (req.ok) {
+              await renderSettingsTab();
+              await checkStalePricing(); // re-check banner
+            } else {
+              alert('Failed to update pricing');
+              btn.disabled = false;
+              btn.textContent = 'Save';
+            }
+          } catch (e) {
+            console.error(e);
+            alert('Error updating pricing');
+            btn.disabled = false;
+            btn.textContent = 'Save';
+          }
+        }
+      });
+    });
+    
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--accent-red); font-size:13px;">Error loading pricing: ${esc(err.message)}</div>`;
+  }
 }
 
 // ── Tags ─────────────────────────────────────────────────────────────────────
@@ -249,7 +441,12 @@ function renderTags() {
 
 // ── Data Fetching & Filtering ─────────────────────────────────────────────────
 async function fetchData() {
-  els.listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-light);">Loading...</div>';
+  if (document.getElementById('stale-pricing-banner').style.display === 'none' && !document.getElementById('stale-pricing-banner').dataset.checked) {
+    document.getElementById('stale-pricing-banner').dataset.checked = "true";
+    checkStalePricing();
+  }
+  
+  els.listContainer.innerHTML = '<div style="padding:16px; color:var(--text-light); text-align:center; font-size:13px;">Loading traces...</div>';
 
   try {
     _traces = await apiFetchTraces(_filters.search);  // api.js
@@ -305,6 +502,14 @@ function applyFilters() {
   if (_filters.timeRange === 'Last 6h') maxAgeMs = 6 * 60 * 60 * 1000;
   if (_filters.timeRange === '1 day') maxAgeMs = 24 * 60 * 60 * 1000;
 
+  const customDateStr = _filters.customDate;
+  let customStart = 0, customEnd = Infinity;
+  if (customDateStr) {
+    const d = new Date(customDateStr + 'T00:00:00');
+    customStart = d.getTime();
+    customEnd = customStart + 24 * 60 * 60 * 1000;
+  }
+
   _filteredTraces = _traces.filter(t => {
     if (_currentNavTab === 'Library') {
       let passPinned = _markedFilters.pinned ? (t.pinned === 1) : false;
@@ -342,7 +547,11 @@ function applyFilters() {
 
       if (t.timestamp) {
         const traceTime = new Date(t.timestamp).getTime();
-        if (now - traceTime > maxAgeMs) return false;
+        if (customDateStr) {
+          if (traceTime < customStart || traceTime >= customEnd) return false;
+        } else if (now - traceTime > maxAgeMs) {
+          return false;
+        }
       }
       return true;
     }
@@ -395,6 +604,23 @@ function renderDetail() {
   els.detailBadge.textContent = isOk ? 'Succeeded' : (t.failure_type ? `Failed: ${t.failure_type}` : 'Failed');
   els.detailModel.textContent = t.model;
   els.detailProvider.textContent = t.provider;
+
+  let userSpan = document.getElementById('detail-user');
+  if (!userSpan) {
+    userSpan = document.createElement('span');
+    userSpan.id = 'detail-user';
+    userSpan.className = 'detail-user';
+    userSpan.style.fontSize = '11px';
+    userSpan.style.marginRight = '12px';
+    userSpan.style.color = 'var(--text-light)';
+    els.detailProvider.after(userSpan);
+  }
+  if (t.user_id) {
+    userSpan.textContent = `User: ${t.user_id}`;
+    userSpan.style.display = 'inline-block';
+  } else {
+    userSpan.style.display = 'none';
+  }
 
   const hdrIcon = document.getElementById('pin-icon-header');
   if (hdrIcon) hdrIcon.style.fill = t.pinned === 1 ? 'currentColor' : 'none';

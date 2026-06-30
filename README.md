@@ -59,6 +59,7 @@ llm-inspector ui        # opens http://localhost:8765
 |---|---|
 | **OpenAI** (and any OpenAI-compatible endpoint) | ✅ Fully tested |
 | **DeepSeek** (via OpenAI SDK with custom base URL) | ✅ Fully tested |
+| **OpenAI-Compatible Providers** | ✅ Automatically detected via base_url (Note: As of June 27, 2026, historical pre-fix traces captured before this update will remain mislabeled as 'openai') |
 | **Anthropic** | ⚠️ Patch implemented, not yet verified against a live successful call |
 | **Google Gemini** | ⚠️ Patch implemented, not yet verified against a live successful call |
 
@@ -67,6 +68,9 @@ llm-inspector ui        # opens http://localhost:8765
 ## Data
 
 Traces are stored in `llm_inspector_data/traces.db` (SQLite) relative to the working directory where the server or your script is started. This directory is created automatically on first use.
+
+Synthetic/demo data used in tests is always tagged 'demo'. To identify or exclude it at any time:
+`SELECT * FROM traces WHERE tags LIKE '%demo%';`
 
 To reset: `llm-inspector clear` or `rm llm_inspector_data/traces.db`.
 

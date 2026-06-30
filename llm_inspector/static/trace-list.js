@@ -145,6 +145,21 @@ function renderList() {
     `;
   };
 
+  _filteredTraces.sort((a, b) => {
+    if (typeof _currentSort !== 'undefined') {
+      if (_currentSort === 'latency') {
+        return (b.latency_ms || 0) - (a.latency_ms || 0);
+      }
+      if (_currentSort === 'status') {
+        const aErr = (a.status !== 'succeeded' && a.status !== 'ok') ? 1 : 0;
+        const bErr = (b.status !== 'succeeded' && b.status !== 'ok') ? 1 : 0;
+        if (aErr !== bErr) return bErr - aErr;
+        return (b.timestamp || 0) - (a.timestamp || 0);
+      }
+    }
+    return (b.timestamp || 0) - (a.timestamp || 0);
+  });
+
   _filteredTraces.forEach(t => {
     const row = document.createElement('div');
     row.className = `trace-row ${t.status !== 'succeeded' && t.status !== 'ok' ? 'failed' : ''} ${t.id === _selectedId ? 'active' : ''}`;

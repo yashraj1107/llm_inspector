@@ -101,11 +101,22 @@ def _classify_failure(error_msg: str | None) -> str | None:
     if "invalid_request" in msg or "400" in msg: return "invalid_request"
     return "unknown_error"
 
-def _compute_cost(model: str, p_tok: int | None, c_tok: int | None) -> float | None:
-    if model not in PRICING or p_tok is None or c_tok is None:
+def _compute_cost(model: str, p_tok: int | None, c_tok: int | None, pricing_map: dict) -> float | None:
+    if model not in pricing_map or p_tok is None or c_tok is None:
         return None
-    rates = PRICING[model]
+    rates = pricing_map[model]
     return (p_tok / 1000.0 * rates["prompt"]) + (c_tok / 1000.0 * rates["completion"])
+
+# Helper to load pricing map from DB
+def _get_pricing_map(conn) -> dict:
+    rows = conn.execute("SELECT model, prompt_price_per_1k, completion_price_per_1k FROM model_pricing").fetchall()
+    return {
+        row["model"]: {
+            "prompt": row["prompt_price_per_1k"],
+            "completion": row["completion_price_per_1k"]
+        }
+        for row in rows
+    }
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -132,6 +143,7 @@ def list_traces(
     provider: Optional[str] = Query(default=None, description="Filter by provider"),
     status: Optional[str] = Query(default=None, description="Filter by status (ok|error)"),
     search: Optional[str] = Query(default=None, description="Search request/response JSON text"),
+    include_demo: bool = Query(default=False, description="Include demo traces"),
 ):
     """
     Return a JSON array of trace summaries, newest first.
@@ -152,6 +164,9 @@ def list_traces(
             where_clauses.append("(request_json LIKE ? OR response_json LIKE ?)")
             params.extend([f"%{search}%", f"%{search}%"])
 
+        if not include_demo:
+            where_clauses.append("(tags IS NULL OR tags NOT LIKE '%demo%')")
+
         where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
         params.append(limit)
 
@@ -166,27 +181,30 @@ def list_traces(
             """,
             params,
         ).fetchall()
+        
+        pricing_map = _get_pricing_map(conn)
+        
+        results = []
+        for row in rows:
+            results.append({
+                "id":                row["id"],
+                "provider":          row["provider"],
+                "model":             row["model"],
+                "status":            row["status"],
+                "failure_type":      _classify_failure(row["error_message"]) if row["status"] == "error" else None,
+                "latency_ms":        row["latency_ms"],
+                "timestamp":         _ts_to_iso(row["timestamp"]),
+                "prompt_tokens":     row["prompt_tokens"],
+                "completion_tokens": row["completion_tokens"],
+                "cost":              _compute_cost(row["model"], row["prompt_tokens"], row["completion_tokens"], pricing_map),
+                "pinned":            row["pinned"],
+                "tags":              row["tags"],
+                "parent_trace_id":   row["parent_trace_id"]
+            })
+        return results
+
     finally:
         conn.close()
-
-    return [
-        {
-            "id":                row["id"],
-            "provider":          row["provider"],
-            "model":             row["model"],
-            "status":            row["status"],
-            "failure_type":      _classify_failure(row["error_message"]) if row["status"] == "error" else None,
-            "latency_ms":        row["latency_ms"],
-            "timestamp":         _ts_to_iso(row["timestamp"]),
-            "prompt_tokens":     row["prompt_tokens"],
-            "completion_tokens": row["completion_tokens"],
-            "cost":              _compute_cost(row["model"], row["prompt_tokens"], row["completion_tokens"]),
-            "pinned":            row["pinned"],
-            "tags":              row["tags"],
-            "parent_trace_id":   row["parent_trace_id"]
-        }
-        for row in rows
-    ]
 
 
 @app.get("/api/traces/{trace_id}")
@@ -200,36 +218,37 @@ def get_trace(trace_id: str):
         row = conn.execute(
             "SELECT * FROM traces WHERE id = ?", (trace_id,)
         ).fetchone()
+        
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No trace found with id {trace_id!r}",
+            )
+
+        d = dict(row)
+        pricing_map = _get_pricing_map(conn)
+        
+        return {
+            "id":                d["id"],
+            "timestamp":         _ts_to_iso(d["timestamp"]),
+            "provider":          d["provider"],
+            "model":             d["model"],
+            "status":            d["status"],
+            "failure_type":      _classify_failure(d["error_message"]) if d["status"] == "error" else None,
+            "latency_ms":        d["latency_ms"],
+            "prompt_tokens":     d["prompt_tokens"],
+            "completion_tokens": d["completion_tokens"],
+            "cost":              _compute_cost(d["model"], d["prompt_tokens"], d["completion_tokens"], pricing_map),
+            "error_message":     d["error_message"],
+            "user_id":           d["user_id"],
+            "parent_trace_id":   d["parent_trace_id"],
+            "pinned":            d["pinned"],
+            "tags":              d["tags"],
+            "request_json":      _safe_parse_json(d["request_json"]),
+            "response_json":     _safe_parse_json(d["response_json"]),
+        }
     finally:
         conn.close()
-
-    if row is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No trace found with id {trace_id!r}",
-        )
-
-    d = dict(row)
-    return {
-        "id":                d["id"],
-        "timestamp":         _ts_to_iso(d["timestamp"]),
-        "provider":          d["provider"],
-        "model":             d["model"],
-        "status":            d["status"],
-        "failure_type":      _classify_failure(d["error_message"]) if d["status"] == "error" else None,
-        "latency_ms":        d["latency_ms"],
-        "prompt_tokens":     d["prompt_tokens"],
-        "completion_tokens": d["completion_tokens"],
-        "cost":              _compute_cost(d["model"], d["prompt_tokens"], d["completion_tokens"]),
-        "error_message":     d["error_message"],
-        "user_id":           d["user_id"],
-        "parent_trace_id":   d["parent_trace_id"],
-        "pinned":            d["pinned"],
-        "tags":              d["tags"],
-        # Parsed into real objects — frontend can JSON.stringify directly
-        "request_json":      _safe_parse_json(d["request_json"]),
-        "response_json":     _safe_parse_json(d["response_json"]),
-    }
 
 
 class ReplayRequest(BaseModel):
@@ -255,6 +274,11 @@ def replay_trace(trace_id: str, req: ReplayRequest):
     provider = req.provider or d["provider"]
     request_json_str = d["request_json"] or "{}"
     kwargs = _safe_parse_json(request_json_str) or {}
+    
+    # Force synchronous execution for replays. If we pass stream=True, the SDK returns a 
+    # generator which we never consume, so the trace is never generated and the call hangs/drops.
+    kwargs.pop("stream", None)
+    kwargs.pop("stream_options", None)
 
     # Override model if provided
     if req.model:
@@ -487,6 +511,7 @@ def get_cost_stats():
     conn = _get_conn()
     try:
         rows = conn.execute("SELECT model, prompt_tokens, completion_tokens, timestamp FROM traces").fetchall()
+        pricing_map = _get_pricing_map(conn)
     finally:
         conn.close()
         
@@ -499,7 +524,7 @@ def get_cost_stats():
     cost_all = 0.0
     
     for row in rows:
-        c = _compute_cost(row["model"], row["prompt_tokens"], row["completion_tokens"])
+        c = _compute_cost(row["model"], row["prompt_tokens"], row["completion_tokens"], pricing_map)
         if c is not None:
             cost_all += c
             if now - row["timestamp"] <= week_sec:
@@ -509,7 +534,89 @@ def get_cost_stats():
                 
     return {
         "today": round(cost_today, 6),
-        "week": round(cost_week, 6),
-        "all_time": round(cost_all, 6)
+        "week":  round(cost_week,  6),
+        "all":   round(cost_all,   6),
     }
 
+class PricingUpdate(BaseModel):
+    prompt_price_per_1k: float
+    completion_price_per_1k: float
+
+@app.get("/api/pricing")
+def get_pricing():
+    conn = _get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM model_pricing ORDER BY provider, model").fetchall()
+        import datetime
+        now = datetime.datetime.utcnow()
+        results = []
+        for r in rows:
+            lv = r["last_verified"]
+            days = 0
+            if lv:
+                try:
+                    dt = datetime.datetime.fromisoformat(lv)
+                    days = (now - dt).days
+                except Exception:
+                    pass
+            results.append({
+                "model": r["model"],
+                "provider": r["provider"],
+                "prompt_price_per_1k": r["prompt_price_per_1k"],
+                "completion_price_per_1k": r["completion_price_per_1k"],
+                "last_verified": lv,
+                "days_since_verified": days
+            })
+        return results
+    finally:
+        conn.close()
+
+@app.post("/api/pricing/{model}")
+def update_pricing(model: str, req: PricingUpdate):
+    conn = _get_conn()
+    try:
+        import datetime
+        now_iso = datetime.datetime.utcnow().isoformat()
+        res = conn.execute(
+            "UPDATE model_pricing SET prompt_price_per_1k=?, completion_price_per_1k=?, last_verified=? WHERE model=?",
+            (req.prompt_price_per_1k, req.completion_price_per_1k, now_iso, model)
+        )
+        if res.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Model not found")
+        conn.commit()
+        return {"success": True, "last_verified": now_iso}
+    finally:
+        conn.close()
+
+@app.get("/api/pricing/stale")
+def get_stale_pricing():
+    conn = _get_conn()
+    try:
+        # Get unique models used in traces
+        used_models = {r["model"] for r in conn.execute("SELECT DISTINCT model FROM traces").fetchall()}
+        
+        # Get all pricing info
+        rows = conn.execute("SELECT model, last_verified FROM model_pricing").fetchall()
+        import datetime
+        now = datetime.datetime.utcnow()
+        stale_models = []
+        
+        for r in rows:
+            model = r["model"]
+            if model not in used_models:
+                continue
+            
+            lv = r["last_verified"]
+            if lv:
+                try:
+                    dt = datetime.datetime.fromisoformat(lv)
+                    if (now - dt).days > 7:
+                        stale_models.append(model)
+                except Exception:
+                    stale_models.append(model)
+            else:
+                stale_models.append(model)
+                
+        return stale_models
+    finally:
+        conn.close()
