@@ -124,11 +124,12 @@ def _get_pricing_map(conn) -> dict:
 
 @app.get("/api/providers/available")
 def get_available_providers():
+    from llm_inspector.config import get_provider_credentials
     return [
-        {"provider": "openai", "available": bool(os.environ.get("OPENAI_API_KEY"))},
-        {"provider": "anthropic", "available": bool(os.environ.get("ANTHROPIC_API_KEY"))},
-        {"provider": "deepseek", "available": bool(os.environ.get("DEEPSEEK_API_KEY"))},
-        {"provider": "gemini", "available": bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))}
+        {"provider": "openai", "available": bool(get_provider_credentials("openai")["api_key"])},
+        {"provider": "anthropic", "available": bool(get_provider_credentials("anthropic")["api_key"])},
+        {"provider": "deepseek", "available": bool(get_provider_credentials("deepseek")["api_key"])},
+        {"provider": "gemini", "available": bool(get_provider_credentials("gemini")["api_key"])}
     ]
 
 @app.get("/", include_in_schema=False)
@@ -311,45 +312,55 @@ def replay_trace(trace_id: str, req: ReplayRequest):
     call_ts = int(time.time())
     
     try:
+        from llm_inspector.config import get_provider_credentials
+        creds = get_provider_credentials(provider)
+
         if provider == "openai" or req.base_url:
-            api_key = os.environ.get("OPENAI_API_KEY")
+            if req.base_url:
+                compat_creds = get_provider_credentials("openai-compatible")
+                api_key = compat_creds["api_key"]
+                base_url = req.base_url
+            else:
+                api_key = creds["api_key"]
+                base_url = None
+
             if not api_key and not req.base_url:
-                raise HTTPException(status_code=400, detail="No OPENAI_API_KEY configured for openai — add it to .env and restart the server.")
-            
+                raise HTTPException(status_code=400, detail="No OPENAI_API_KEY configured for openai — add it to .env or call configure() and restart the server.")
+
             import openai
             client_kwargs = {}
             client_kwargs["api_key"] = api_key or "custom"
-            if req.base_url:
-                client_kwargs["base_url"] = req.base_url
-                
+            if base_url:
+                client_kwargs["base_url"] = base_url
+
             client = openai.OpenAI(**client_kwargs)
             client.chat.completions.create(**kwargs)
-            
+
         elif provider == "deepseek":
-            deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
+            deepseek_key = creds["api_key"]
+            base_url = creds["base_url"] or "https://api.deepseek.com"
             if not deepseek_key:
-                raise HTTPException(status_code=400, detail="No DEEPSEEK_API_KEY configured for deepseek — add it to .env and restart the server.")
+                raise HTTPException(status_code=400, detail="No DEEPSEEK_API_KEY configured for deepseek — add it to .env or call configure() and restart the server.")
             import openai
-            client = openai.OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com")
+            client = openai.OpenAI(api_key=deepseek_key, base_url=base_url)
             client.chat.completions.create(**kwargs)
 
         elif provider == "anthropic":
-            api_key = os.environ.get("ANTHROPIC_API_KEY")
+            api_key = creds["api_key"]
             if not api_key:
-                raise HTTPException(status_code=400, detail="No ANTHROPIC_API_KEY configured for anthropic — add it to .env and restart the server.")
-            
+                raise HTTPException(status_code=400, detail="No ANTHROPIC_API_KEY configured for anthropic — add it to .env or call configure() and restart the server.")
+
             import anthropic
             client = anthropic.Anthropic(api_key=api_key)
             client.messages.create(**kwargs)
 
         elif provider == "gemini":
-            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            api_key = creds["api_key"]
             if not api_key:
-                raise HTTPException(status_code=400, detail="No GEMINI_API_KEY configured for gemini — add it to .env and restart the server.")
-            
+                raise HTTPException(status_code=400, detail="No GEMINI_API_KEY configured for gemini — add it to .env or call configure() and restart the server.")
+
             import google.genai
             client = google.genai.Client(api_key=api_key)
-            # Remove kwargs not meant for generate_content if any, though request_json should match original call
             client.models.generate_content(**kwargs)
 
         else:

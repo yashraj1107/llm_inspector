@@ -38,6 +38,36 @@ response = client.chat.completions.create(
 
 `auto()` is **idempotent** — safe to call multiple times, from any import order.
 
+## Configuration
+
+You can configure `llm_inspector` using either environment variables or by explicitly passing credentials in your code.
+
+### Pattern 1: Environment Variables (Default)
+Set environment variables directly or place them in a `.env` file in your project root:
+```bash
+OPENAI_API_KEY=sk-...
+DEEPSEEK_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIza...
+```
+
+### Pattern 2: Explicit Programmatic Config
+For environments where environment variables aren't preferred (e.g. CI/CD, container orchestrators, or code-injected secrets), configure the API keys explicitly:
+```python
+import llm_inspector
+
+llm_inspector.configure(
+    openai_api_key="sk-...",
+    deepseek_api_key="sk-...",
+    anthropic_api_key="sk-ant-...",
+    gemini_api_key="AIza...",
+)
+llm_inspector.auto()
+```
+
+> [!NOTE]
+> `configure()` only affects prompt replay execution and the dashboard's provider availability checks. It does not affect active trace capture, which automatically inherits the configuration of the SDK clients you initialize in your application code.
+
 ## Dashboard
 
 ```bash

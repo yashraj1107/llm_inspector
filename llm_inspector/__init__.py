@@ -26,6 +26,7 @@ from llm_inspector.patches import (
 )
 from llm_inspector.storage import db_path
 from llm_inspector.spans import span
+from llm_inspector.config import configure
 
 
 def auto() -> None:
@@ -50,5 +51,6 @@ __all__ = [
     "patch_gemini",
     "db_path",
     "span",
+    "configure",
 ]
-__version__ = "0.3.2"
+__version__ = "0.3.3"

@@ -58,6 +58,14 @@ def patch_anthropic() -> None:
     def _wrapped_create(self, *args, **kwargs):  # noqa: ANN001, ANN202
         start_time = time.time()
 
+        try:
+            from llm_inspector.spans import get_current_span_id, get_current_root_id
+            parent_trace_id = get_current_span_id()
+            root_trace_id = get_current_root_id()
+        except Exception:
+            parent_trace_id = None
+            root_trace_id = None
+
         # ----------------------------------------------------------------
         # Call the REAL method — exceptions propagate unchanged.
         # ----------------------------------------------------------------
@@ -136,6 +144,9 @@ def patch_anthropic() -> None:
                 "completion_tokens": completion_tokens,
                 "status":            "ok",
                 "error_message":     None,
+                "parent_trace_id":   parent_trace_id,
+                "root_trace_id":     root_trace_id,
+                "span_type":         "llm_call",
             }
 
             enqueue_event(event)

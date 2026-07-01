@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-inspector"
-version = "0.3.2"
+version = "0.3.3"
 description = "Local-first capture, inspection, and replay for LLM API calls — Chrome DevTools for AI calls."
 readme = "README.md"
 requires-python = ">=3.11"
