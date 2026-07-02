@@ -12,6 +12,8 @@ Gemini-specific field differences vs OpenAI:
 - response.text           → simple string accessor (try first)
 - response.usage_metadata.prompt_token_count    → prompt_tokens
 - response.usage_metadata.candidates_token_count → completion_tokens
+# NOTE: Asynchronous client support (google.genai.Client(....).aio) is currently
+# a known gap and not yet patched.
 """
 
 import json
@@ -116,6 +118,23 @@ def patch_gemini() -> None:
             # -- latency -------------------------------------------------
             latency_ms = int((time.time() - start_time) * 1000)
 
+            # -- tool calls ----------------------------------------------
+            try:
+                parts = response.candidates[0].content.parts
+                fc_parts = [p for p in parts if hasattr(p, "function_call") 
+                            and p.function_call]
+                tool_calls_data = None
+                if fc_parts:
+                    tool_calls_data = json.dumps([
+                        {
+                            "name": p.function_call.name,
+                            "args": dict(p.function_call.args),
+                        }
+                        for p in fc_parts
+                    ], default=str)
+            except Exception:
+                tool_calls_data = None
+
             # -- assemble event ------------------------------------------
             event: dict = {
                 "id":                str(uuid.uuid4()),
@@ -132,6 +151,7 @@ def patch_gemini() -> None:
                 "parent_trace_id":   parent_trace_id,
                 "root_trace_id":     root_trace_id,
                 "span_type":         "llm_call",
+                "tool_calls":        tool_calls_data,
             }
 
             enqueue_event(event)

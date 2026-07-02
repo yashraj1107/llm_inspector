@@ -22,6 +22,7 @@ let _availableEnvProviders = [];      // from /api/providers/available
 
 let _currentNavTab = 'Traces';        // 'Traces' | 'Library'
 let _currentSort = 'time';            // 'time' | 'latency' | 'status'
+let _viewMode = 'flat';               // 'flat' | 'tree'
 const _markedFilters = { pinned: false, tagged: false, hasVersions: false };
 
 const _filters = {
@@ -39,6 +40,7 @@ const _filters = {
 // ── DOM Refs ─────────────────────────────────────────────────────────────────
 const els = {
   btnToggleSidebar: document.getElementById('btn-toggle-sidebar'),
+  btnViewToggle: document.getElementById('btn-view-toggle'),
   filterSidebar: document.getElementById('filter-sidebar'),
   searchInput: document.getElementById('search-input'),
   resetFilters: document.getElementById('reset-filters'),
@@ -650,6 +652,21 @@ function renderDetail() {
     els.errorStrip.style.display = 'none';
   }
 
+  const tabTimeline = document.getElementById('tab-timeline');
+  if (tabTimeline) {
+    if (t.root_trace_id || t.parent_trace_id || _traces.some(o => o.parent_trace_id === t.id || o.root_trace_id === t.id)) {
+      tabTimeline.style.display = 'inline-block';
+    } else {
+      tabTimeline.style.display = 'none';
+      if (_activeTab === 'TIMELINE') {
+        _activeTab = 'REQUEST';
+        Array.from(els.detailTabs.children).forEach(c => {
+          c.classList.toggle('active', c.dataset.tab === 'REQUEST');
+        });
+      }
+    }
+  }
+
   renderTabContent();
 }
 
@@ -703,7 +720,10 @@ function renderTabContent() {
       </div>
     `;
     loadDiffHistory(t);  // diff.js
+  } else if (_activeTab === 'TIMELINE') {
+    renderTimelineTab(t);
   }
+}
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -771,6 +791,125 @@ function handleCopyCurl() {
     curl = `# curl generation not supported for provider ${t.provider}`;
   }
   navigator.clipboard.writeText(curl).then(() => alert('Copied cURL to clipboard!'));
+}
+
+async function renderTimelineTab(t) {
+  const rootId = t.root_trace_id || t.id;
+  els.tabContent.innerHTML = '<div style="padding:16px; color:var(--text-light);">Loading waterfall timeline...</div>';
+  
+  try {
+    let list = await apiFetchTracesByRoot(rootId);
+    
+    if (t.id === rootId && !list.some(x => x.id === t.id)) {
+      list.push(t);
+    }
+    if (!list.some(x => x.id === rootId)) {
+      try {
+        const rootTrace = await apiFetchTrace(rootId);
+        list.push(rootTrace);
+      } catch (e) {
+        console.error("Could not fetch root trace", e);
+      }
+    }
+    
+    const nodesMap = new Map(list.map(x => [x.id, x]));
+    const childMap = new Map();
+    list.forEach(x => {
+      if (x.parent_trace_id) {
+        if (!childMap.has(x.parent_trace_id)) {
+          childMap.set(x.parent_trace_id, []);
+        }
+        childMap.get(x.parent_trace_id).push(x);
+      }
+    });
+    
+    const rootNode = list.find(x => x.id === rootId) || list.find(x => !x.parent_trace_id || !nodesMap.has(x.parent_trace_id));
+    if (!rootNode) {
+      els.tabContent.innerHTML = '<div class="empty-msg">No timeline data available.</div>';
+      return;
+    }
+    
+    const orderedList = [];
+    const traverse = (node) => {
+      if (!node || orderedList.some(x => x.id === node.id)) return;
+      orderedList.push(node);
+      const children = childMap.get(node.id) || [];
+      children.sort((a, b) => {
+        if (a.timestamp === b.timestamp) return a.id.localeCompare(b.id);
+        return new Date(a.timestamp) - new Date(b.timestamp);
+      });
+      children.forEach(traverse);
+    };
+    traverse(rootNode);
+    
+    list.forEach(x => {
+      if (!orderedList.some(y => y.id === x.id)) {
+        orderedList.push(x);
+      }
+    });
+
+    const times = orderedList.map(x => new Date(x.timestamp).getTime());
+    const minTime = Math.min(...times);
+    
+    const traceData = orderedList.map((x, i) => {
+      const startMs = times[i] - minTime;
+      const durationMs = x.latency_ms || 0;
+      const endMs = startMs + durationMs;
+      return { trace: x, startMs, durationMs, endMs };
+    });
+    
+    const maxEndMs = Math.max(...traceData.map(d => d.endMs), 1);
+    
+    let chartHtml = `
+      <div class="timeline-container">
+        <div class="timeline-header-row">
+          <div class="timeline-header-label">Trace / Span</div>
+          <div class="timeline-header-chart">Timeline (Total: ${(maxEndMs >= 1000 ? (maxEndMs / 1000).toFixed(1) + 's' : maxEndMs + 'ms')})</div>
+        </div>
+      `;
+    
+    traceData.forEach(d => {
+      const x = d.trace;
+      const leftPct = (d.startMs / maxEndMs) * 100;
+      const widthPct = Math.max((d.durationMs / maxEndMs) * 100, 1.5);
+      
+      const badgeClass = x.span_type ? `bar-${x.span_type}` : 'bar-custom';
+      const label = x.model || 'Span';
+      const isSelected = x.id === t.id;
+      
+      let tickHtml = '';
+      if (x.ttft_ms != null && x.ttft_ms > 0 && x.ttft_ms < d.durationMs) {
+        const tickLeftPct = (x.ttft_ms / d.durationMs) * 100;
+        tickHtml = `
+          <div class="timeline-tick" style="left: ${tickLeftPct}%;" title="TTFT: ${x.ttft_ms}ms">
+            <div class="timeline-tick-label">TTFT</div>
+          </div>
+        `;
+      }
+      
+      const latValStr = x.latency_ms ? (x.latency_ms >= 1000 ? (x.latency_ms / 1000).toFixed(1) + 's' : x.latency_ms + 'ms') : '—';
+      
+      chartHtml += `
+        <div class="timeline-row ${isSelected ? 'active' : ''}">
+          <div class="timeline-row-label" title="${esc(label)}" onclick="selectTrace('${x.id}')">
+            ${esc(label)}
+          </div>
+          <div class="timeline-chart-area">
+            <div class="timeline-bar ${badgeClass}" style="left: ${leftPct}%; width: ${widthPct}%;" title="${esc(label)} (${latValStr})">
+              ${tickHtml}
+              <div class="timeline-latency-label">${latValStr}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    chartHtml += `</div>`;
+    els.tabContent.innerHTML = chartHtml;
+    
+  } catch (err) {
+    els.tabContent.innerHTML = `<div class="empty-msg" style="color:var(--accent-red)">Error loading timeline: ${esc(err.message)}</div>`;
+  }
 }
 
 // Kickoff

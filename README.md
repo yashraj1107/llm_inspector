@@ -38,6 +38,17 @@ response = client.chat.completions.create(
 
 `auto()` is **idempotent** — safe to call multiple times, from any import order.
 
+## Features
+
+- **SDK Auto-Patching**: Captures model names, inputs, outputs, latency, tokens, and cost automatically for OpenAI, Anthropic, and Gemini.
+- **Span Context & Nesting**: Build hierarchy chains manually using the `llm_inspector.span()` context manager/decorator (supports both synchronous and asynchronous contexts) to group multiple LLM calls under a parent span.
+- **Auto-Linking**: Patched SDK calls made inside a `span()` block automatically resolve and link their `parent_trace_id` and `root_trace_id` without any extra developer code.
+- **Tool Call Capture**: Parses and stores structured tool/function call definitions and outputs in a dedicated searchable column.
+- **Streaming Time-to-First-Token (TTFT)**: Purely observational capture of token arrival latency (TTFT) for streaming OpenAI/DeepSeek completions.
+- **Interactive Waterfall Timeline**: Visualizes nested trace timelines in the dashboard detail panel with relative horizontal bars and TTFT markers.
+- **Tree vs. Flat Toggle**: Visualizes parent-child span/completion hierarchies inside the dashboard list panel.
+- **Version Diffs & Replay**: Edits and replays prompts directly in the UI, diffing responses across versions.
+
 ## Configuration
 
 You can configure `llm_inspector` using either environment variables or by explicitly passing credentials in your code.
@@ -114,6 +125,11 @@ python tests/test_pipeline.py
 python tests/test_openai_patch.py
 python tests/test_import_order.py
 python tests/test_multi_provider.py
+python tests/test_tool_calls.py
+python tests/test_ttft.py
+python tests/test_auto_link.py
+python tests/test_spans.py
+python tests/test_configure.py
 
 # Docker volume-persistence smoke test
 docker build -f docker/Dockerfile -t llm_inspector .

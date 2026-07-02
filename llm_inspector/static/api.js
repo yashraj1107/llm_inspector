@@ -11,6 +11,13 @@ async function apiFetchTraces(search = '') {
   return res.json();
 }
 
+async function apiFetchTracesByRoot(rootTraceId) {
+  const url = `/api/traces?limit=1000&root_trace_id=${encodeURIComponent(rootTraceId)}&include_demo=true`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 async function apiFetchTrace(id) {
   const res = await fetch(`/api/traces/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error('Failed to fetch trace details');

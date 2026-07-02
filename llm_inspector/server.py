@@ -129,7 +129,15 @@ def get_available_providers():
         {"provider": "openai", "available": bool(get_provider_credentials("openai")["api_key"])},
         {"provider": "anthropic", "available": bool(get_provider_credentials("anthropic")["api_key"])},
         {"provider": "deepseek", "available": bool(get_provider_credentials("deepseek")["api_key"])},
-        {"provider": "gemini", "available": bool(get_provider_credentials("gemini")["api_key"])}
+        {"provider": "gemini", "available": bool(get_provider_credentials("gemini")["api_key"])},
+        {"provider": "groq", "available": bool(get_provider_credentials("groq")["api_key"])},
+        {"provider": "mistral", "available": bool(get_provider_credentials("mistral")["api_key"])},
+        {"provider": "perplexity", "available": bool(get_provider_credentials("perplexity")["api_key"])},
+        {"provider": "together", "available": bool(get_provider_credentials("together")["api_key"])},
+        {"provider": "openrouter", "available": bool(get_provider_credentials("openrouter")["api_key"])},
+        {"provider": "fireworks", "available": bool(get_provider_credentials("fireworks")["api_key"])},
+        {"provider": "azure_openai", "available": bool(get_provider_credentials("azure_openai")["api_key"])},
+        {"provider": "ollama", "available": bool(get_provider_credentials("ollama")["api_key"])}
     ]
 
 @app.get("/", include_in_schema=False)
@@ -145,6 +153,7 @@ def list_traces(
     status: Optional[str] = Query(default=None, description="Filter by status (ok|error)"),
     search: Optional[str] = Query(default=None, description="Search request/response JSON text"),
     include_demo: bool = Query(default=False, description="Include demo traces"),
+    root_trace_id: Optional[str] = Query(default=None, description="Filter by root_trace_id"),
 ):
     """
     Return a JSON array of trace summaries, newest first.
@@ -164,6 +173,9 @@ def list_traces(
         if search:
             where_clauses.append("(request_json LIKE ? OR response_json LIKE ?)")
             params.extend([f"%{search}%", f"%{search}%"])
+        if root_trace_id:
+            where_clauses.append("root_trace_id = ?")
+            params.append(root_trace_id)
 
         if not include_demo:
             where_clauses.append("(tags IS NULL OR tags NOT LIKE '%demo%')")
@@ -174,7 +186,8 @@ def list_traces(
         rows = conn.execute(
             f"""
             SELECT id, provider, model, status, latency_ms,
-                   timestamp, prompt_tokens, completion_tokens, error_message, pinned, tags, parent_trace_id
+                   timestamp, prompt_tokens, completion_tokens, error_message, pinned, tags,
+                   parent_trace_id, root_trace_id, span_type
             FROM traces
             {where_sql}
             ORDER BY timestamp DESC
@@ -200,7 +213,9 @@ def list_traces(
                 "cost":              _compute_cost(row["model"], row["prompt_tokens"], row["completion_tokens"], pricing_map),
                 "pinned":            row["pinned"],
                 "tags":              row["tags"],
-                "parent_trace_id":   row["parent_trace_id"]
+                "parent_trace_id":   row["parent_trace_id"],
+                "root_trace_id":     row["root_trace_id"],
+                "span_type":         row["span_type"]
             })
         return results
 
@@ -247,6 +262,10 @@ def get_trace(trace_id: str):
             "tags":              d["tags"],
             "request_json":      _safe_parse_json(d["request_json"]),
             "response_json":     _safe_parse_json(d["response_json"]),
+            "root_trace_id":     d["root_trace_id"],
+            "span_type":         d["span_type"],
+            "ttft_ms":           d["ttft_ms"],
+            "tool_calls":        _safe_parse_json(d["tool_calls"]) if d["tool_calls"] else None,
         }
     finally:
         conn.close()
@@ -362,6 +381,22 @@ def replay_trace(trace_id: str, req: ReplayRequest):
             import google.genai
             client = google.genai.Client(api_key=api_key)
             client.models.generate_content(**kwargs)
+
+        elif provider == "azure_openai":
+            api_key = creds["api_key"]
+            endpoint = creds["base_url"]
+            if not endpoint:
+                raise HTTPException(status_code=400, detail="No AZURE_OPENAI_ENDPOINT configured for azure_openai — add it to .env or call configure() and restart the server.")
+            if not api_key:
+                raise HTTPException(status_code=400, detail="No AZURE_OPENAI_API_KEY configured for azure_openai — add it to .env or call configure() and restart the server.")
+
+            from openai import AzureOpenAI
+            client = AzureOpenAI(
+                api_key=api_key,
+                azure_endpoint=endpoint,
+                api_version=creds.get("api_version", "2024-02-01")
+            )
+            client.chat.completions.create(**kwargs)
 
         else:
             raise HTTPException(status_code=400, detail=f"Replay not supported for provider {provider}")

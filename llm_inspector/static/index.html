@@ -151,10 +151,15 @@
           <span class="list-count" id="list-count">
             <span class="list-count-num">0</span> <span class="list-count-text">Traces</span>
           </span>
-          <button class="list-sort">
-            <span>Sort: Time</span>
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-          </button>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="list-view-toggle" id="btn-view-toggle" style="background:none; border:1px solid var(--border-color); border-radius:4px; padding:4px 8px; font-size:11px; cursor:pointer; color:var(--text-main); display:flex; align-items:center; gap:4px;">
+              <span>View: Flat</span>
+            </button>
+            <button class="list-sort">
+              <span>Sort: Time</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+          </div>
         </div>
         <div class="list-content" id="list-container">
           <!-- Trace Rows injected here -->
@@ -217,6 +222,7 @@
             <button class="detail-tab" data-tab="REPLAY">REPLAY</button>
             <button class="detail-tab" data-tab="DIFF">DIFF</button>
             <button class="detail-tab" data-tab="COMPARE">COMPARE</button>
+            <button class="detail-tab" data-tab="TIMELINE" id="tab-timeline" style="display: none;">TIMELINE</button>
           </div>
 
           <!-- Scrollable Content -->

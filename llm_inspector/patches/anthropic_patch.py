@@ -27,6 +27,7 @@ from llm_inspector.patches.registry import register_patcher
 # ---------------------------------------------------------------------------
 
 _patched: bool = False
+_real_async_create = None
 
 # ---------------------------------------------------------------------------
 # Public entry point
@@ -41,7 +42,7 @@ def patch_anthropic() -> None:
     Safe to call multiple times — subsequent calls are no-ops.
     Does nothing if the ``anthropic`` package is not installed.
     """
-    global _patched  # noqa: PLW0603
+    global _patched, _real_async_create  # noqa: PLW0603
 
     if _patched:
         return
@@ -131,6 +132,26 @@ def patch_anthropic() -> None:
             # -- latency -------------------------------------------------
             latency_ms = int((time.time() - start_time) * 1000)
 
+            # -- tool calls ----------------------------------------------
+            try:
+                tool_blocks = [
+                    block for block in response.content 
+                    if getattr(block, "type", None) == "tool_use"
+                ]
+                tool_calls_data = None
+                if tool_blocks:
+                    tool_calls_data = json.dumps([
+                        {
+                            "id":    block.id,
+                            "type":  "tool_use",
+                            "name":  block.name,
+                            "input": block.input,
+                        }
+                        for block in tool_blocks
+                    ], default=str)
+            except Exception:
+                tool_calls_data = None
+
             # -- assemble event ------------------------------------------
             event: dict = {
                 "id":                str(uuid.uuid4()),
@@ -147,6 +168,7 @@ def patch_anthropic() -> None:
                 "parent_trace_id":   parent_trace_id,
                 "root_trace_id":     root_trace_id,
                 "span_type":         "llm_call",
+                "tool_calls":        tool_calls_data,
             }
 
             enqueue_event(event)
@@ -157,8 +179,116 @@ def patch_anthropic() -> None:
 
         return response
 
-    # ---- install the wrapper -----------------------------------------------
+    _real_async_create = _messages_mod.AsyncMessages.create
+
+    import functools
+
+    @functools.wraps(_real_async_create)
+    async def _wrapped_async_create(self, *args, **kwargs):
+        try:
+            from llm_inspector.spans import get_current_span_id, get_current_root_id
+            parent_trace_id = get_current_span_id()
+            root_trace_id = get_current_root_id()
+        except Exception:
+            parent_trace_id = None
+            root_trace_id = None
+
+        start_time = time.time()
+        response = await _real_async_create(self, *args, **kwargs)
+
+        try:
+            try:
+                model = kwargs.get("model", "unknown") or "unknown"
+            except Exception:  # noqa: BLE001
+                model = "unknown"
+
+            try:
+                request_json = json.dumps(kwargs, default=str)
+            except Exception:  # noqa: BLE001
+                request_json = "{}"
+
+            try:
+                content_blocks = []
+                for block in response.content:
+                    btype = getattr(block, "type", None)
+                    if btype == "text":
+                        content_blocks.append({
+                            "type": "text",
+                            "text": getattr(block, "text", None),
+                        })
+                    elif btype == "tool_use":
+                        content_blocks.append({
+                            "type":  "tool_use",
+                            "id":    getattr(block, "id", None),
+                            "name":  getattr(block, "name", None),
+                            "input": getattr(block, "input", None),
+                        })
+                    else:
+                        content_blocks.append({"type": btype})
+                response_json = json.dumps(
+                    {"content": content_blocks}, default=str
+                )
+            except Exception:  # noqa: BLE001
+                response_json = None
+
+            try:
+                prompt_tokens = response.usage.input_tokens
+            except Exception:  # noqa: BLE001
+                prompt_tokens = None
+
+            try:
+                completion_tokens = response.usage.output_tokens
+            except Exception:  # noqa: BLE001
+                completion_tokens = None
+
+            latency_ms = int((time.time() - start_time) * 1000)
+
+            try:
+                tool_blocks = [
+                    block for block in response.content 
+                    if getattr(block, "type", None) == "tool_use"
+                ]
+                tool_calls_data = None
+                if tool_blocks:
+                    tool_calls_data = json.dumps([
+                        {
+                            "id":    block.id,
+                            "type":  "tool_use",
+                            "name":  block.name,
+                            "input": block.input,
+                        }
+                        for block in tool_blocks
+                    ], default=str)
+            except Exception:
+                tool_calls_data = None
+
+            event = {
+                "id":                str(uuid.uuid4()),
+                "timestamp":         int(time.time()),
+                "provider":          "anthropic",
+                "model":             model,
+                "request_json":      request_json,
+                "response_json":     response_json,
+                "latency_ms":        latency_ms,
+                "prompt_tokens":     prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "status":            "ok",
+                "error_message":     None,
+                "parent_trace_id":   parent_trace_id,
+                "root_trace_id":     root_trace_id,
+                "span_type":         "llm_call",
+                "tool_calls":        tool_calls_data,
+            }
+            enqueue_event(event)
+
+        except Exception:  # noqa: BLE001
+            pass
+
+        return response
+
+    # ---- install the wrappers -----------------------------------------------
     _messages_mod.Messages.create = _wrapped_create
+    _messages_mod.AsyncMessages.create = _wrapped_async_create
     _patched = True
 
 

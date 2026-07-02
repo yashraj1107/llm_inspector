@@ -840,3 +840,154 @@ html, body {
   font-style: italic;
   font-size: 13px;
 }
+
+/* Span Type Badges */
+.span-type-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.span-type-badge.badge-blue {
+  background-color: #EBF8FF;
+  color: #2B6CB0;
+  border: 1px solid #BEE3F8;
+}
+.span-type-badge.badge-grey {
+  background-color: #EDF2F7;
+  color: #4A5568;
+  border: 1px solid #E2E8F0;
+}
+.span-type-badge.badge-orange {
+  background-color: #FEEBC8;
+  color: #C05621;
+  border: 1px solid #FBD38D;
+}
+.span-type-badge.badge-green {
+  background-color: #C6F6D5;
+  color: #22543D;
+  border: 1px solid #9AE6B4;
+}
+
+/* Waterfall Timeline Styling */
+.timeline-container {
+  padding: 20px;
+  overflow-y: auto;
+  height: 100%;
+}
+.timeline-header-row {
+  display: flex;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+.timeline-header-label {
+  width: 180px;
+  flex-shrink: 0;
+}
+.timeline-header-chart {
+  flex: 1;
+}
+.timeline-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.timeline-row.active {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+.timeline-row-label {
+  width: 180px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 12px;
+  font-weight: 500;
+  color: var(--text-dark);
+  cursor: pointer;
+}
+.timeline-row-label:hover {
+  text-decoration: underline;
+  color: var(--accent-blue);
+}
+.timeline-chart-area {
+  flex: 1;
+  position: relative;
+  height: 24px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  margin-right: 60px; /* Leave space for latency label */
+}
+.timeline-bar {
+  position: absolute;
+  height: 100%;
+  border-radius: 3px;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+  overflow: visible;
+  white-space: nowrap;
+}
+.timeline-bar:hover {
+  opacity: 1;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+/* Bar colors matching badges */
+.timeline-bar.bar-llm_call {
+  background-color: #BEE3F8;
+  border: 1px solid #90CDF4;
+}
+.timeline-bar.bar-custom {
+  background-color: #E2E8F0;
+  border: 1px solid #CBD5E0;
+}
+.timeline-bar.bar-tool_call {
+  background-color: #FEEBC8;
+  border: 1px solid #FBD38D;
+}
+.timeline-bar.bar-retrieval {
+  background-color: #C6F6D5;
+  border: 1px solid #9AE6B4;
+}
+.timeline-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: #E53E3E;
+  z-index: 5;
+}
+.timeline-tick-label {
+  position: absolute;
+  top: -14px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: bold;
+  color: #E53E3E;
+  white-space: nowrap;
+}
+.timeline-latency-label {
+  position: absolute;
+  right: -55px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-medium);
+  font-weight: 600;
+}
+

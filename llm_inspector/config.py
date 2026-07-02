@@ -59,6 +59,42 @@ def get_provider_credentials(provider: str) -> dict:
                        or get("google_api_key", "GOOGLE_API_KEY"),
             "base_url": None,
         }
+    elif provider == "groq":
+        return {
+            "api_key": get("groq_api_key", "GROQ_API_KEY"),
+            "base_url": None,
+        }
+    elif provider == "mistral":
+        return {
+            "api_key": get("mistral_api_key", "MISTRAL_API_KEY"),
+            "base_url": None,
+        }
+    elif provider == "perplexity":
+        return {
+            "api_key": get("perplexity_api_key", "PERPLEXITY_API_KEY"),
+            "base_url": None,
+        }
+    elif provider == "together":
+        return {
+            "api_key": get("together_api_key", "TOGETHER_API_KEY"),
+            "base_url": None,
+        }
+    elif provider == "openrouter":
+        return {
+            "api_key": get("openrouter_api_key", "OPENROUTER_API_KEY"),
+            "base_url": None,
+        }
+    elif provider == "fireworks":
+        return {
+            "api_key": get("fireworks_api_key", "FIREWORKS_API_KEY"),
+            "base_url": None,
+        }
+    elif provider == "azure_openai":
+        return {
+            "api_key": get("azure_openai_api_key", "AZURE_OPENAI_API_KEY"),
+            "base_url": get("azure_openai_endpoint", "AZURE_OPENAI_ENDPOINT") or get("azure_openai_base_url"),
+            "api_version": get("azure_openai_api_version", "AZURE_OPENAI_API_VERSION") or "2024-02-01",
+        }
     elif provider in ("openai-compatible", "ollama"):
         return {
             "api_key": get("custom_api_key") or "not-needed",
